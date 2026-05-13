@@ -26,6 +26,14 @@ import newton.examples
 CAPSULE_RADIUS = 0.1
 CAPSULE_HALF_HEIGHT = 0.5  # cylindrical half-length (excluding hemispherical caps)
 PAIR_HALF_SEPARATION = 0.45  # half the in-plane distance between the two capsules of a level
+SETTLE_TEST_WINDOW = 30
+SETTLE_MAX_SPEED = 0.15
+SETTLE_MAX_OMEGA = 0.5
+SETTLE_MAX_MEAN_SPEED = 0.12
+SETTLE_MAX_MEAN_OMEGA = 0.25
+SETTLE_MAX_WINDOW_MOTION = 0.01
+SUPPORT_REMOVAL_TEST_FRAMES = 12
+SUPPORT_REMOVAL_MIN_DROP = 0.015
 
 # Quaternions that lay a Z-aligned capsule along the world X and Y axes.
 _Q_ALONG_X = wp.quat_from_axis_angle(wp.vec3(0.0, 1.0, 0.0), 0.5 * wp.pi)
@@ -42,13 +50,7 @@ class Example:
         self.fps = 120
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
-        self.sim_substeps = 10
-        # The deadzone needs to sit between AL's residual convergence error
-        # and per-substep gravity displacement. With warm-start, 5 iters has
-        # residual ~1e-5 m — same scale as the 1e-5 deadzone — so noise
-        # leaks through over time and the stack drifts apart. 25 iters
-        # drives residual well below the threshold so the deadzone reliably
-        # absorbs it.
+        self.sim_substeps = 30
         self.sim_iterations = 25
         self.sim_dt = self.frame_dt / self.sim_substeps
 
@@ -99,25 +101,14 @@ class Example:
         self.model = builder.finalize()
 
         if self.solver_type == "vbd":
-            # The default gamma=0.999 keeps warm-started lambdas indefinitely
-            # so removing a support body leaves the rest floating; gamma=0.5
-            # bleeds half each step. Lower gamma also damps the small error
-            # AL accumulates each step instead of compounding it — important
-            # for long-term rest stability.
             self.solver = newton.solvers.SolverVBD(
                 self.model,
                 iterations=self.sim_iterations,
-                rigid_contact_history=True,
-                rigid_avbd_gamma=0.5,
+                rigid_contact_history=False,
             )
-            # The deadzone has to sit between AL's residual noise (~few µm
-            # at 25 iterations) and the per-substep displacement on a body
-            # whose support has been removed (~1.6e-5 m on the first frame
-            # after removal, before warm-started lambdas decay). 1.5e-5 sits
-            # in that narrow window, suppressing residual noise while still
-            # letting the unbalanced load break the freeze.
-            self.solver.rigid_contact_stick_freeze_translation_eps = 1.5e-5
-            self.solver.rigid_contact_stick_freeze_angular_eps = 1.5e-5
+            stick_freeze_eps = 1.0e-6
+            self.solver.rigid_contact_stick_freeze_translation_eps = stick_freeze_eps
+            self.solver.rigid_contact_stick_freeze_angular_eps = stick_freeze_eps
         elif self.solver_type == "xpbd":
             self.solver = newton.solvers.SolverXPBD(
                 self.model,
@@ -129,6 +120,9 @@ class Example:
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()
+        self._test_body_q_window: list[np.ndarray] = []
+        self._test_max_speed_window: list[float] = []
+        self._test_max_omega_window: list[float] = []
 
         pipeline = newton.CollisionPipeline(self.model, contact_matching="latest")
         self.contacts = self.model.contacts(collision_pipeline=pipeline)
@@ -172,22 +166,60 @@ class Example:
         self.viewer.log_contacts(self.contacts, self.state_0)
         self.viewer.end_frame()
 
-    def test_final(self):
+    def test_post_step(self):
         body_q = self.state_0.body_q.numpy()
         body_qd = self.state_0.body_qd.numpy()
 
         assert np.isfinite(body_q).all(), "Non-finite body transforms"
         assert np.isfinite(body_qd).all(), "Non-finite body velocities"
 
-        # Stack should have settled — both linear and angular velocities small.
         max_speed = float(np.max(np.linalg.norm(body_qd[:, 3:6], axis=1)))
         max_omega = float(np.max(np.linalg.norm(body_qd[:, 0:3], axis=1)))
-        assert max_speed < 0.1, f"Stack not at rest: max linear speed {max_speed:.4f} m/s"
-        assert max_omega < 0.5, f"Stack not at rest: max angular speed {max_omega:.4f} rad/s"
+        self._test_body_q_window.append(body_q.copy())
+        self._test_max_speed_window.append(max_speed)
+        self._test_max_omega_window.append(max_omega)
+
+        if len(self._test_body_q_window) > SETTLE_TEST_WINDOW:
+            self._test_body_q_window.pop(0)
+            self._test_max_speed_window.pop(0)
+            self._test_max_omega_window.pop(0)
+
+    def test_final(self):
+        if not self._test_body_q_window:
+            self.test_post_step()
+
+        body_q = self._test_body_q_window[-1]
+        body_qd = self.state_0.body_qd.numpy()
+
+        assert np.isfinite(body_q).all(), "Non-finite body transforms"
+        assert np.isfinite(body_qd).all(), "Non-finite body velocities"
+
+        max_speed = float(np.max(np.linalg.norm(body_qd[:, 3:6], axis=1)))
+        max_omega = float(np.max(np.linalg.norm(body_qd[:, 0:3], axis=1)))
+        assert max_speed < SETTLE_MAX_SPEED, f"Stack not at rest: max linear speed {max_speed:.4f} m/s"
+        assert max_omega < SETTLE_MAX_OMEGA, f"Stack not at rest: max angular speed {max_omega:.4f} rad/s"
+
+        mean_window_speed = float(np.mean(self._test_max_speed_window))
+        mean_window_omega = float(np.mean(self._test_max_omega_window))
+        assert mean_window_speed < SETTLE_MAX_MEAN_SPEED, (
+            f"Stack not settled over final {len(self._test_max_speed_window)} frames: "
+            f"mean linear speed {mean_window_speed:.4f} m/s"
+        )
+        assert mean_window_omega < SETTLE_MAX_MEAN_OMEGA, (
+            f"Stack not settled over final {len(self._test_max_omega_window)} frames: "
+            f"mean angular speed {mean_window_omega:.4f} rad/s"
+        )
+
+        window_positions = np.stack([q[:, :3] for q in self._test_body_q_window])
+        max_window_motion = float(np.max(np.linalg.norm(window_positions - window_positions[-1], axis=2)))
+        assert max_window_motion < SETTLE_MAX_WINDOW_MOTION, (
+            f"Stack drifting over final {len(self._test_body_q_window)} frames: "
+            f"max body displacement {max_window_motion:.4f} m"
+        )
 
         z_step = 2.0 * CAPSULE_RADIUS
-        xy_tol = 0.05  # in-plane drift [m]
-        z_tol = 0.5 * CAPSULE_RADIUS
+        xy_tol = 0.03  # in-plane drift [m]
+        z_tol = 0.35 * CAPSULE_RADIUS
 
         for body, init_pos in zip(self.capsule_bodies, self.initial_positions, strict=True):
             pos = body_q[body, :3]
@@ -204,6 +236,41 @@ class Example:
             assert abs(level_z - expected_z) < z_tol, (
                 f"Level {level} mean z={level_z:.4f} m, expected {expected_z:.4f} m"
             )
+
+        self._test_support_removal_falls(body_qd)
+
+    def _test_support_removal_falls(self, settled_body_qd):
+        if self.num_levels < 2:
+            return
+
+        body_q = self._test_body_q_window[-1].copy()
+        body_qd = settled_body_qd.copy()
+        falling_bodies = self.capsule_bodies[2:]
+        initial_falling_z = float(np.mean(body_q[falling_bodies, 2]))
+
+        for offset, body in enumerate(self.capsule_bodies[:2]):
+            body_q[body, 0] += 100.0 + offset
+            body_q[body, 1] += 100.0
+            body_q[body, 2] = CAPSULE_RADIUS
+            body_qd[body, :] = 0.0
+
+        self.state_0.body_q.assign(body_q)
+        self.state_0.body_qd.assign(body_qd)
+        self.state_1.body_q.assign(body_q)
+        self.state_1.body_qd.assign(body_qd)
+        self.graph = None
+
+        min_falling_z = initial_falling_z
+        for _ in range(SUPPORT_REMOVAL_TEST_FRAMES):
+            self.step()
+            removal_body_q = self.state_0.body_q.numpy()
+            min_falling_z = min(min_falling_z, float(np.mean(removal_body_q[falling_bodies, 2])))
+
+        drop = initial_falling_z - min_falling_z
+        assert drop > SUPPORT_REMOVAL_MIN_DROP, (
+            f"Stack did not fall after bottom support removal: mean z dropped {drop:.4f} m "
+            f"over {SUPPORT_REMOVAL_TEST_FRAMES} frames"
+        )
 
 
 if __name__ == "__main__":

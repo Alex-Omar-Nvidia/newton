@@ -747,6 +747,22 @@ add_example_test(
     test_options={"num-frames": 120, "num-pyramids": 3, "pyramid-size": 5},
     use_viewer=True,
 )
+add_example_test(
+    TestContactsExamples,
+    name="contacts.example_capsule_stack",
+    devices=cuda_test_devices,
+    test_options={"num-frames": 200},
+    use_viewer=True,
+    test_suffix="vbd",
+)
+add_example_test(
+    TestContactsExamples,
+    name="contacts.example_capsule_stack",
+    devices=cuda_test_devices,
+    test_options={"num-frames": 200, "solver": "xpbd"},
+    use_viewer=True,
+    test_suffix="xpbd",
+)
 
 
 class TestMultiphysicsExamples(unittest.TestCase):
