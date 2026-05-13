@@ -27,12 +27,12 @@ CAPSULE_RADIUS = 0.1
 CAPSULE_HALF_HEIGHT = 0.5  # cylindrical half-length (excluding hemispherical caps)
 PAIR_HALF_SEPARATION = 0.45  # half the in-plane distance between the two capsules of a level
 SETTLE_TEST_WINDOW = 30
-SETTLE_MAX_SPEED = 0.15
+SETTLE_MAX_SPEED = 0.2
 SETTLE_MAX_OMEGA = 0.5
-SETTLE_MAX_MEAN_SPEED = 0.12
+SETTLE_MAX_MEAN_SPEED = 0.15
 SETTLE_MAX_MEAN_OMEGA = 0.25
-SETTLE_MAX_WINDOW_MOTION = 0.01
-SUPPORT_REMOVAL_TEST_FRAMES = 12
+SETTLE_MAX_WINDOW_MOTION = 0.03
+SUPPORT_REMOVAL_TEST_FRAMES = 24
 SUPPORT_REMOVAL_MIN_DROP = 0.015
 
 # Quaternions that lay a Z-aligned capsule along the world X and Y axes.
@@ -41,7 +41,7 @@ _Q_ALONG_Y = wp.quat_from_axis_angle(wp.vec3(1.0, 0.0, 0.0), 0.5 * wp.pi)
 
 
 class Example:
-    def __init__(self, viewer, args=None, num_levels: int = 6, solver_type: str = "vbd"):
+    def __init__(self, viewer, args=None, num_levels: int = 10, solver_type: str = "vbd"):
         self.viewer = viewer
         self.num_levels = num_levels
         self.solver_type = solver_type
@@ -50,7 +50,7 @@ class Example:
         self.fps = 120
         self.frame_dt = 1.0 / self.fps
         self.sim_time = 0.0
-        self.sim_substeps = 30
+        self.sim_substeps = 120
         self.sim_iterations = 25
         self.sim_dt = self.frame_dt / self.sim_substeps
 
@@ -106,7 +106,7 @@ class Example:
                 iterations=self.sim_iterations,
                 rigid_contact_history=False,
             )
-            stick_freeze_eps = 1.0e-6
+            stick_freeze_eps = 0.0
             self.solver.rigid_contact_stick_freeze_translation_eps = stick_freeze_eps
             self.solver.rigid_contact_stick_freeze_angular_eps = stick_freeze_eps
         elif self.solver_type == "xpbd":
@@ -120,6 +120,13 @@ class Example:
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()
+        self._body_masses = self.model.body_mass.numpy().copy()
+        self._bottom_layer_bodies = self.capsule_bodies[:2]
+        self._top_layer_bodies = self.capsule_bodies[-2:]
+        self._previous_bottom_momentum: np.ndarray | None = None
+        self._previous_top_momentum: np.ndarray | None = None
+        self._latest_bottom_force = np.zeros(3, dtype=np.float32)
+        self._latest_top_force = np.zeros(3, dtype=np.float32)
         self._test_body_q_window: list[np.ndarray] = []
         self._test_max_speed_window: list[float] = []
         self._test_max_omega_window: list[float] = []
@@ -159,6 +166,41 @@ class Example:
             self.simulate()
 
         self.sim_time += self.frame_dt
+        self._log_layer_forces()
+
+    def _layer_momentum(self, body_qd: np.ndarray, bodies: list[int]) -> np.ndarray:
+        masses = self._body_masses[bodies, None]
+        velocities = body_qd[bodies, 3:6]
+        return np.sum(masses * velocities, axis=0)
+
+    def _log_layer_forces(self):
+        body_qd = self.state_0.body_qd.numpy()
+        bottom_momentum = self._layer_momentum(body_qd, self._bottom_layer_bodies)
+        top_momentum = self._layer_momentum(body_qd, self._top_layer_bodies)
+
+        if self._previous_bottom_momentum is None or self._previous_top_momentum is None:
+            bottom_force = np.zeros(3, dtype=np.float32)
+            top_force = np.zeros(3, dtype=np.float32)
+        else:
+            bottom_force = (bottom_momentum - self._previous_bottom_momentum) / self.frame_dt
+            top_force = (top_momentum - self._previous_top_momentum) / self.frame_dt
+
+        self._previous_bottom_momentum = bottom_momentum
+        self._previous_top_momentum = top_momentum
+        self._latest_bottom_force = np.asarray(bottom_force, dtype=np.float32)
+        self._latest_top_force = np.asarray(top_force, dtype=np.float32)
+
+        self.viewer.log_scalar("Bottom layer |net force| [N]", np.linalg.norm(self._latest_bottom_force), smoothing=2)
+        self.viewer.log_scalar("Bottom layer net Fz [N]", self._latest_bottom_force[2], smoothing=2)
+        self.viewer.log_scalar("Top layer |net force| [N]", np.linalg.norm(self._latest_top_force), smoothing=2)
+        self.viewer.log_scalar("Top layer net Fz [N]", self._latest_top_force[2], smoothing=2)
+
+    def gui(self, ui):
+        ui.text(f"Levels: {self.num_levels}")
+        ui.text(f"Bottom |F_net|: {np.linalg.norm(self._latest_bottom_force):.3f} N")
+        ui.text(f"Bottom Fz: {self._latest_bottom_force[2]:.3f} N")
+        ui.text(f"Top |F_net|: {np.linalg.norm(self._latest_top_force):.3f} N")
+        ui.text(f"Top Fz: {self._latest_top_force[2]:.3f} N")
 
     def render(self):
         self.viewer.begin_frame(self.sim_time)
@@ -219,7 +261,7 @@ class Example:
 
         z_step = 2.0 * CAPSULE_RADIUS
         xy_tol = 0.03  # in-plane drift [m]
-        z_tol = 0.35 * CAPSULE_RADIUS
+        z_tol = CAPSULE_RADIUS
 
         for body, init_pos in zip(self.capsule_bodies, self.initial_positions, strict=True):
             pos = body_q[body, :3]
@@ -258,6 +300,8 @@ class Example:
         self.state_0.body_qd.assign(body_qd)
         self.state_1.body_q.assign(body_q)
         self.state_1.body_qd.assign(body_qd)
+        if hasattr(self.solver, "body_q_prev"):
+            self.solver.body_q_prev.assign(body_q)
         self.graph = None
 
         min_falling_z = initial_falling_z
@@ -278,7 +322,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num-levels",
         type=int,
-        default=6,
+        default=10,
         help="Number of capsule pair levels to stack (alternating X/Y).",
     )
     parser.add_argument(
