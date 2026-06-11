@@ -35,8 +35,9 @@ from .kernels import (
     create_inertia_matrix_cholesky_kernel,
     create_inertia_matrix_kernel,
     eval_dense_cholesky_batched,
-    eval_dense_gemm_batched,
+    eval_dense_jacobian_transpose_product_batched,
     eval_dense_solve_batched,
+    eval_dense_spatial_mass_jacobian_batched,
     eval_fk_with_velocity_conversion,
     eval_fk_with_velocity_conversion_from_joint_starts,
     eval_rigid_fk,
@@ -306,6 +307,9 @@ class SolverFeatherstone(SolverBase):
                 self.J_size += 6 * joint_count * dof_count
                 self.M_size += 6 * joint_count * 6 * joint_count
                 self.H_size += dof_count * dof_count
+
+            self.articulation_M_rows_max = max(articulation_M_rows)
+            self.articulation_J_cols_max = max(articulation_J_cols)
 
             # matrix offsets for batched gemm
             self.articulation_J_start = wp.array(articulation_J_start, dtype=wp.int32, device=model.device)
@@ -781,14 +785,15 @@ class SolverFeatherstone(SolverBase):
                         else:
                             # form P = M*J
                             wp.launch(
-                                eval_dense_gemm_batched,
-                                dim=model.articulation_count,
+                                eval_dense_spatial_mass_jacobian_batched,
+                                dim=(
+                                    model.articulation_count,
+                                    self.articulation_M_rows_max,
+                                    self.articulation_J_cols_max,
+                                ),
                                 inputs=[
                                     self.articulation_M_rows,
                                     self.articulation_J_cols,
-                                    self.articulation_J_rows,
-                                    False,
-                                    False,
                                     self.articulation_M_start,
                                     self.articulation_J_start,
                                     # P start is the same as J start since it has the same dims as J
@@ -802,15 +807,16 @@ class SolverFeatherstone(SolverBase):
 
                             # form H = J^T*P
                             wp.launch(
-                                eval_dense_gemm_batched,
-                                dim=model.articulation_count,
+                                eval_dense_jacobian_transpose_product_batched,
+                                dim=(
+                                    model.articulation_count,
+                                    self.articulation_J_cols_max,
+                                    self.articulation_J_cols_max,
+                                ),
                                 inputs=[
-                                    self.articulation_J_cols,
-                                    self.articulation_J_cols,
                                     # P rows is the same as J rows
                                     self.articulation_J_rows,
-                                    True,
-                                    False,
+                                    self.articulation_J_cols,
                                     self.articulation_J_start,
                                     # P start is the same as J start since it has the same dims as J
                                     self.articulation_J_start,
