@@ -1536,6 +1536,67 @@ def dense_gemm(
                 C[C_start + i * n + j] = sum
 
 
+@wp.kernel
+def eval_dense_spatial_mass_jacobian_batched(
+    M_rows: wp.array[int],
+    J_cols: wp.array[int],
+    M_start: wp.array[int],
+    J_start: wp.array[int],
+    P_start: wp.array[int],
+    M: wp.array[float],
+    J: wp.array[float],
+    P: wp.array[float],
+):
+    batch, row, col = wp.tid()
+
+    row_count = M_rows[batch]
+    col_count = J_cols[batch]
+    if row >= row_count or col >= col_count:
+        return
+
+    M_offset = M_start[batch]
+    J_offset = J_start[batch]
+    P_offset = P_start[batch]
+
+    row_start = (row // 6) * 6
+    M_row = M_offset + dense_index(row_count, row, row_start)
+
+    sum = float(0.0)
+    for k in range(6):
+        sum += M[M_row + k] * J[J_offset + dense_index(col_count, row_start + k, col)]
+
+    P[P_offset + row * col_count + col] = sum
+
+
+@wp.kernel
+def eval_dense_jacobian_transpose_product_batched(
+    J_rows: wp.array[int],
+    J_cols: wp.array[int],
+    J_start: wp.array[int],
+    P_start: wp.array[int],
+    H_start: wp.array[int],
+    J: wp.array[float],
+    P: wp.array[float],
+    H: wp.array[float],
+):
+    batch, row, col = wp.tid()
+
+    row_count = J_rows[batch]
+    col_count = J_cols[batch]
+    if row >= col_count or col >= col_count:
+        return
+
+    J_offset = J_start[batch]
+    P_offset = P_start[batch]
+    H_offset = H_start[batch]
+
+    sum = float(0.0)
+    for k in range(row_count):
+        sum += J[J_offset + dense_index(col_count, k, row)] * P[P_offset + dense_index(col_count, k, col)]
+
+    H[H_offset + dense_index(col_count, row, col)] = sum
+
+
 # @wp.func_grad(dense_gemm)
 # def adj_dense_gemm(
 #     m: int,
