@@ -24,7 +24,7 @@ format long
 
 scriptDir = fileparts(mfilename('fullpath'));
 
-youngsModulus = 5.0e6;       % [Pa]
+youngsModulus = 1.0e6;       % [Pa]
 poissonsRatio = 0.30;
 density = 1200.0;            % [kg/m^3]
 dampingRatio = 0.02;

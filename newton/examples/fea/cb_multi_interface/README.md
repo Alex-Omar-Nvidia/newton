@@ -39,6 +39,12 @@ with MATLAB and Octave and does not require PDE Toolbox. It:
 4. constructs classical damping at a two-percent modal damping ratio; and
 5. integrates the dense Craig–Bampton equations with implicit Euler.
 
+The demonstration uses a deliberately soft `1 MPa` linear material so the
+recovered displacement is visible at the object's true scale. The Octave
+reference reaches approximately `31.5 mm` peak probe displacement. The
+visualizer plots the dominant Newton and Octave displacement histories on the
+same millimeter scale and reports their running maximum difference.
+
 The default demonstration drives the top port around its local `+Z` axis with
 
 ```text
