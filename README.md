@@ -587,6 +587,27 @@ If you run the examples from a source checkout with uv, use
   </tr>
   <tr>
     <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_sand_bucket.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_sand_bucket.jpg" alt="Five gallons of sand draining through a funnel">
+      </a><br>
+      <code>python -m newton.examples mpm_sand_bucket</code>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_bottle_drop.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_bottle_drop.jpg" alt="Bottle impact crater in dry sand">
+      </a><br>
+      <code>python -m newton.examples mpm_bottle_drop</code>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_sand_tests.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_sand_tests.jpg" alt="Six independent sand experiments in one scene">
+      </a><br>
+      <code>python -m newton.examples mpm_sand_tests</code><br>
+      <a href="scripts/sand_sysid/README.md">Measure piles and craters and fit shared MPM parameters</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
       <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_granular.py">
         <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_granular.jpg" alt="MPM Granular">
       </a>

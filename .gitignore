@@ -74,3 +74,6 @@ docs/_static/viser/
 
 # Notebook checkpoints
 **/*.ipynb_checkpoints/
+
+# Local sand system-identification histories and GPU logs
+/outputs/sand-sysid/

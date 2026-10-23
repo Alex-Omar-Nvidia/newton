@@ -1,0 +1,76 @@
+{
+  "test_types": {
+    "sand_pour": {
+      "dimensions": ["width_m", "length_m", "height_m"],
+      "shared": {
+        "sand_volume_us_gallons": 5.0,
+        "drop_height_reference": null,
+        "footprint_includes_scattered_grains": null
+      }
+    },
+    "bottle_drop": {
+      "dimensions": ["width_m", "length_m", "depth_m"],
+      "shared": {
+        "orientation": "cap_down",
+        "sand_condition": "completely_dry",
+        "sand_surface": "flattened_mound",
+        "bottle_fill": "full_water",
+        "water_density_kg_m3": 1000.0,
+        "empty_bottle_mass_kg": 0.0,
+        "mass_assumption": "Use water mass only; neglect empty bottle mass as instructed.",
+        "bottle_removed_before_measurement": true,
+        "depth_reference": "post_removal_crater_rim",
+        "depth_sign": "positive_down",
+        "drop_height_reference": null,
+        "sand_mound_width_m": null,
+        "sand_mound_length_m": null,
+        "sand_mound_depth_m": null,
+        "sand_bulk_density_kg_m3": null,
+        "bottle_height_m": null,
+        "bottle_diameter_m": null,
+        "cap_diameter_m": null,
+        "cap_height_m": null,
+        "measurement_delay_after_removal_s": null,
+        "removal_procedure": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "1m-5gal-sand-pour",
+      "test_type": "sand_pour",
+      "measurements_csv": "data/1m-5gal-sand-pour.csv",
+      "configuration": {"drop_height_m": 1.0}
+    },
+    {
+      "name": "2m-gal-sand-pour",
+      "test_type": "sand_pour",
+      "measurements_csv": "data/2m-gal-sand-pour.csv",
+      "configuration": {"drop_height_m": 2.0}
+    },
+    {
+      "name": "1m-1l-water-bottle-drop",
+      "test_type": "bottle_drop",
+      "measurements_csv": "data/1m-1l-water-bottle-drop.csv",
+      "configuration": {"drop_height_m": 1.0, "water_volume_ml": 1000.0}
+    },
+    {
+      "name": "1m-500ml-water-bottle-drop",
+      "test_type": "bottle_drop",
+      "measurements_csv": "data/1m-500ml-water-bottle-drop.csv",
+      "configuration": {"drop_height_m": 1.0, "water_volume_ml": 500.0}
+    },
+    {
+      "name": "2m-1l-water-bottle-drop",
+      "test_type": "bottle_drop",
+      "measurements_csv": "data/2m-1l-water-bottle-drop.csv",
+      "configuration": {"drop_height_m": 2.0, "water_volume_ml": 1000.0}
+    },
+    {
+      "name": "2m-500ml-water-bottle-drop",
+      "test_type": "bottle_drop",
+      "measurements_csv": "data/2m-500ml-water-bottle-drop.csv",
+      "configuration": {"drop_height_m": 2.0, "water_volume_ml": 500.0}
+    }
+  ]
+}

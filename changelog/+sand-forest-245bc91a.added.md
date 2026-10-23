@@ -1,0 +1,1 @@
+Add a resumable random-forest-guided system-identification runner for the six sand experiments, exposing seven shared MPM material properties while fixing the remaining plasticity controls to Newton defaults.
