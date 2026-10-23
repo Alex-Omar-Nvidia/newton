@@ -4,8 +4,8 @@
 """Load experimental configurations and derive targets from unmodified trial CSVs.
 
 Inspect the registered cases with ``uv run -m scripts.sand_sysid.cases``.
-Bottle cases describe experiments; a bottle-impact simulation adapter is still
-required before they can run in the MPM calibration loop.
+Run all cases with ``uv run -m newton.examples mpm_sand_tests`` or fit shared
+material parameters with ``uv run --with scikit-learn==1.7.2 python scripts/fit_sand.py --output RUN``.
 """
 
 import argparse
