@@ -1,0 +1,1 @@
+Add an interactive 1 m cubic gravel-pit example with a delayed VBD soft-tire drop, translucent 5 mm gravel samples, live settling and floor-clearance plots, a moving object-height band, and material controls.

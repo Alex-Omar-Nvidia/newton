@@ -136,7 +136,7 @@ class Example:
         mpm_config.voxel_size = args.voxel_size
         mpm_config.grid_type = "fixed"
         mpm_config.grid_padding = 32
-        mpm_config.max_active_cell_count = 1 << 14
+        mpm_config.max_active_cell_count = getattr(self, "mpm_max_active_cell_count", 1 << 14)
         mpm_config.max_iterations = args.mpm_iterations
         mpm_config.critical_fraction = 0.0
         mpm_config.strain_basis = "P0"

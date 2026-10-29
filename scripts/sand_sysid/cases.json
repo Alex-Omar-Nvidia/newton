@@ -19,7 +19,7 @@
         "empty_bottle_mass_kg": 0.0,
         "mass_assumption": "Use water mass only; neglect empty bottle mass as instructed.",
         "bottle_removed_before_measurement": true,
-        "depth_reference": "original_flat_sand_surface",
+        "depth_reference": "post_removal_crater_rim",
         "depth_sign": "positive_down",
         "drop_height_reference": null,
         "sand_mound_width_m": null,

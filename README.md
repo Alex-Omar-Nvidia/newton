@@ -579,6 +579,27 @@ If you run the examples from a source checkout with uv, use
   </tr>
   <tr>
     <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_sand_bucket.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_sand_bucket.jpg" alt="Five gallons of sand draining through a funnel">
+      </a><br>
+      <code>python -m newton.examples mpm_sand_bucket</code>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_bottle_drop.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_bottle_drop.jpg" alt="Bottle impact crater in dry sand">
+      </a><br>
+      <code>python -m newton.examples mpm_bottle_drop</code>
+    </td>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_sand_tests.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_sand_tests.jpg" alt="Six independent sand experiments in one scene">
+      </a><br>
+      <code>python -m newton.examples mpm_sand_tests</code><br>
+      <a href="scripts/sand_sysid/README.md">Measure piles and craters and fit shared MPM parameters</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
       <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/mpm/example_mpm_granular.py">
         <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_mpm_granular.jpg" alt="MPM Granular">
       </a>
@@ -661,6 +682,16 @@ If you run the examples from a source checkout with uv, use
     <td align="center" width="33%">
       <code>python -m newton.examples mpm_water_dam_break</code>
     </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <a href="https://github.com/newton-physics/newton/blob/main/newton/examples/multiphysics/example_vbd_mpm_gravel_pit.py">
+        <img width="320" src="https://raw.githubusercontent.com/newton-physics/newton/main/docs/images/examples/example_vbd_mpm_gravel_pit.jpg" alt="VBD tire in a cubic MPM gravel pit">
+      </a>
+      <br><code>python -m newton.examples vbd_mpm_gravel_pit</code>
+      <br>1 m by 1 m by 1 m gravel pit with a soft 30 cm tire, translucent 5 mm gravel samples, a moving depth band, live settling plots, and material sliders.
+    </td>
+    <td colspan="2"></td>
   </tr>
   <tr>
     <td colspan="3"><h3>Sensor Examples</h3></td>
