@@ -1,0 +1,1 @@
+Add a shared-clock six-case sand experiment scene, rigid water-bottle impacts and extraction, post-removal rim-to-floor crater measurement, and shared MPM material calibration against the recorded trials.
