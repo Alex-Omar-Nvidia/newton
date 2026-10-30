@@ -72,6 +72,21 @@ Run the bottle implementation independently:
 uv run -m newton.examples mpm_bottle_drop
 ```
 
+## Bounded integration check
+
+Run the bounded end-to-end GPU check with the repository CSV catalog:
+
+```sh
+uv run --with scikit-learn==1.7.2 python -m unittest scripts.tests.test_sand_sysid_integration
+```
+
+The test loads all six three-trial CSVs, then fits one candidate against one
+pour and one bottle drop. It uses an 8 s physical window at 20 FPS and coarser
+test geometry. It verifies the saved case inputs, valid measurements, per-case
+errors, best result, and summary. The child process has a 55 s deadline, so
+the integration check remains below one minute. Full-resolution calibration
+continues to use the settings described below.
+
 ## Random-forest material fitting
 
 `fit_sand.py` fits **one shared material** to all selected experiments. Every

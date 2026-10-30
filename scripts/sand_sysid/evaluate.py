@@ -54,6 +54,7 @@ def aggregate_error(errors, weights):
 
 
 def main():
+    """Evaluate one candidate request and write its per-case worker response."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("request", type=Path)
     parser.add_argument("response", type=Path)

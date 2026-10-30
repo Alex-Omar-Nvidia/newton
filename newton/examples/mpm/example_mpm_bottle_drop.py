@@ -20,6 +20,7 @@ from newton.solvers import SolverImplicitMPM
 
 @wp.kernel
 def _lift_body(dt: float, speed: float, body_q: wp.array[wp.transform], body_qd: wp.array[wp.spatial_vector]):
+    """Move the bottle upward at a constant extraction speed [m/s]."""
     i = wp.tid()
     q = body_q[i]
     body_q[i] = wp.transform(
@@ -145,7 +146,15 @@ def bottle_mesh(radius, height, cap_radius, cap_height):
 
 
 class Example:
+    """Simulate a rigid bottle impact, removal, and sand crater measurement."""
+
     def __init__(self, viewer, args):
+        """Build the sand bed, bottle collider, MPM solver, and phase state.
+
+        Args:
+            viewer: Newton viewer receiving the simulation model.
+            args: Parsed bed, bottle, material, and phase options.
+        """
         for name in (
             "height",
             "water_volume_ml",
@@ -269,11 +278,13 @@ class Example:
         viewer.set_camera(wp.vec3(1.7, -2.1, 1.4), pitch=-20, yaw=128)
 
     def _surface(self):
+        """Sample the current sand heightfield in the crater region [m]."""
         return surface_grid(
             self.state_0.particle_q.numpy(), self.radii, extent=self.surface_extent, cell_size=self.args.voxel_size
         )
 
     def step(self):
+        """Advance one frame through settling, impact, extraction, or crater settling."""
         args = self.args
         for _ in range(args.substeps):
             if self.phase == "settling bed" and self.sim_time >= args.pre_settle_seconds - 1e-8:
@@ -303,6 +314,7 @@ class Example:
         self.min_cap_z = min(self.min_cap_z, cap_z)
 
     def _substep(self):
+        """Advance one MPM step and exchange impact forces with the rigid bottle."""
         args = self.args
 
         if self.phase == "falling / impact":
@@ -350,6 +362,7 @@ class Example:
             )
 
     def measure(self):
+        """Measure crater dimensions and report whether the result has settled."""
         positions = self.state_0.particle_q.numpy()
         velocities = self.state_0.particle_qd.numpy()
         if not np.isfinite(positions).all() or not np.isfinite(velocities).all():
@@ -376,6 +389,7 @@ class Example:
         return result
 
     def render(self):
+        """Send the current bottle and sand state to the configured viewer."""
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
         self.viewer.log_points(
@@ -399,6 +413,7 @@ class Example:
 
     @staticmethod
     def create_parser():
+        """Create the CLI parser for bottle, bed, material, and timing options."""
         parser = newton.examples.create_parser()
         parser.set_defaults(num_frames=720)
         for name, default in (

@@ -13,6 +13,16 @@ from scripts.sand_sysid.forest import decode, validate_bounds
 
 
 def rebase_seed(source, bounds_path, output):
+    """Encode a valid saved material under replacement optimizer bounds.
+
+    Args:
+        source: Path to a valid ``best.json`` or ``fit.json``.
+        bounds_path: JSON file defining the replacement search bounds.
+        output: New directory for the rebased result and inputs.
+
+    Returns:
+        Path to the rebased ``best.json``.
+    """
     source = Path(source).resolve()
     output = Path(output).resolve()
     result = json.loads(source.read_text())

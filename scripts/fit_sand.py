@@ -134,6 +134,7 @@ def build_observe_command(result_path, *, cases=DEFAULT_CASES, device=None, expe
 
 
 def observe_sand(argv):
+    """Validate a saved fit and launch its selected cases in the OpenGL viewer."""
     parser = argparse.ArgumentParser(
         prog="fit_sand.py observe_sand", description="Open a saved sand fit in Newton's OpenGL viewer"
     )
@@ -151,6 +152,7 @@ def observe_sand(argv):
 
 
 def main(argv=None):
+    """Run or resume material fitting and checkpoint every candidate evaluation."""
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "observe_sand":
         observe_sand(argv[1:])

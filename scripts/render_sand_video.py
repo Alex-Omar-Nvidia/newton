@@ -17,6 +17,7 @@ from scripts.fit_sand import build_observe_command
 
 
 def main():
+    """Render one selected experiment using a saved fit and optional material override."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--best", type=Path, required=True)
     parser.add_argument(

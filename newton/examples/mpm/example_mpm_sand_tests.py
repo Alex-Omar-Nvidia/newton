@@ -26,19 +26,29 @@ from scripts.sand_sysid.cases import DEFAULT_CASES, dimension_error, load_cases
 
 @wp.kernel
 def _place_particles(source: wp.array[wp.vec3], destination: wp.array[wp.vec3], start: int, offset: wp.vec3):
+    """Copy one case's particles into its translated display tile."""
     i = wp.tid()
     destination[start + i] = source[i] + offset
 
 
 @wp.kernel
 def _place_bodies(source: wp.array[wp.transform], destination: wp.array[wp.transform], start: int, offset: wp.vec3):
+    """Copy one case's rigid poses into its translated display tile."""
     i = wp.tid()
     q = source[i]
     destination[start + i] = wp.transform(wp.transform_get_translation(q) + offset, wp.transform_get_rotation(q))
 
 
 class Example:
+    """Display independent sand cases while sharing a simulation clock."""
+
     def __init__(self, viewer, args):
+        """Build selected cases and their combined display model.
+
+        Args:
+            viewer: Newton viewer for the combined case layout.
+            args: Parsed case selection, scene, material, and timing options.
+        """
         if args.gap < 2.0 or not np.isfinite(args.gap):
             raise ValueError("gap must be at least 2 m")
         self.viewer = viewer
@@ -165,17 +175,20 @@ class Example:
         self._sync_display()
 
     def _focus_camera(self, index):
+        """Aim the viewer at one case using its display offset."""
         offset = self.offsets[index]
         self.viewer.set_camera(offset + wp.vec3(0, -2.32, 1.35), pitch=-20, yaw=90)
         if hasattr(self.viewer, "camera"):
             self.viewer.camera.look_at(offset + wp.vec3(0, 0, 0.65))
 
     def _overview_camera(self):
+        """Frame every selected experiment in the viewer."""
         self.viewer.set_camera(wp.vec3(8, -11, 10), pitch=-36, yaw=125)
         if hasattr(self.viewer, "camera"):
             self.viewer.camera.look_at(wp.vec3(0, 0, 0.4))
 
     def _sync_display(self):
+        """Copy independent case states into the combined display state."""
         for i, child in enumerate(self.children):
             wp.launch(
                 _place_particles,
@@ -190,6 +203,7 @@ class Example:
                 )
 
     def step(self):
+        """Advance each case once, then update measurements and final results."""
         for child in self.children:
             child.step()
         self.sim_time += self.frame_dt
@@ -206,6 +220,7 @@ class Example:
             self._reported = True
 
     def measure(self):
+        """Measure selected cases and combine valid relative RMS errors."""
         errors = []
         for case, child in zip(self.cases, self.children, strict=True):
             measurement = child.measure()
@@ -232,6 +247,7 @@ class Example:
         return self.results
 
     def save_results(self):
+        """Write per-case measurements and the combined error as JSON."""
         self.measure()
         result = {
             "time_s": self.sim_time,
@@ -254,6 +270,7 @@ class Example:
         print(f"Combined normalized RMS error: {self.overall_error}", flush=True)
 
     def render(self):
+        """Render the combined display state and case boundaries."""
         self._sync_display()
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
@@ -266,6 +283,7 @@ class Example:
         self.viewer.end_frame()
 
     def render_ui(self, imgui):
+        """Show case controls, measured dimensions, and errors in the viewer."""
         imgui.text(f"Time: {self.sim_time:.2f} s | Clear gap: {self.args.gap:g} m")
         imgui.text("Rows: pours, 1 m bottles, 2 m bottles. Left bottle: 1 L; right: 500 mL.")
         imgui.text("Bottle and mound geometry are provisional.")
@@ -302,6 +320,7 @@ class Example:
 
     @staticmethod
     def create_parser():
+        """Create the CLI parser for case selection and shared scene settings."""
         parser = newton.examples.create_parser()
         parser.set_defaults(num_frames=720)
         parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)

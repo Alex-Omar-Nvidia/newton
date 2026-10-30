@@ -9,6 +9,14 @@ from pathlib import Path
 
 
 def plot_history(run_directory):
+    """Save candidate and best-so-far error curves for a fitting run.
+
+    Args:
+        run_directory: Directory containing ``history.json``.
+
+    Returns:
+        Path to the saved PNG chart.
+    """
     import matplotlib
 
     matplotlib.use("Agg")

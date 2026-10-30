@@ -88,6 +88,7 @@ def dimension_error(measurement, target):
 
 
 def main():
+    """Print measured trials and derived targets from the case catalog."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", type=Path, default=DEFAULT_CASES)
     parser.add_argument("--test-type", choices=("sand_pour", "bottle_drop"))

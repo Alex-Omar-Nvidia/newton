@@ -46,7 +46,15 @@ def measure_pile(positions, velocities, radii, *, outlet_height, footprint_fract
 
 
 class Example:
+    """Simulate a measured sand pour from a funnel onto a rigid floor."""
+
     def __init__(self, viewer, args):
+        """Build the sand particles, funnel, solver, and viewer scene.
+
+        Args:
+            viewer: Newton viewer receiving the simulation model.
+            args: Parsed pour geometry, material, and timing options.
+        """
         for name in (
             "gallons",
             "height",
@@ -170,6 +178,7 @@ class Example:
         self.warmed = False
 
     def step(self):
+        """Advance one frame and update pile metrics once per simulated second."""
         for _ in range(self.sim_substeps):
             key = self.state_0.particle_q.ptr
             if self.use_cuda_graph and self.warmed:
@@ -188,10 +197,12 @@ class Example:
             self.metrics = self.measure()
 
     def _substep(self):
+        """Advance one MPM substep and project particles outside rigid shapes."""
         self.solver.step(self.state_0, self.state_1, None, None, self.sim_dt)
         self.solver.project_outside(self.state_1, self.state_1, self.sim_dt)
 
     def render(self):
+        """Send the current particle state to the configured viewer."""
         self.viewer.begin_frame(self.sim_time)
         self.viewer.log_state(self.state_0)
         self.viewer.log_points(
@@ -200,6 +211,15 @@ class Example:
         self.viewer.end_frame()
 
     def measure(self, *, footprint_fraction=1.0, yaw_degrees=0.0):
+        """Measure the current pile dimensions and motion.
+
+        Args:
+            footprint_fraction: Central fraction of samples used for width and length.
+            yaw_degrees: Rotation of the measurement axes [degrees].
+
+        Returns:
+            Pile dimensions [m], RMS speed [m/s], and retained fraction.
+        """
         return measure_pile(
             self.state_0.particle_q.numpy(),
             self.state_0.particle_qd.numpy(),
@@ -210,6 +230,7 @@ class Example:
         )
 
     def render_ui(self, imgui):
+        """Show pile measurements and settling status in the viewer panel."""
         imgui.text("Pile dimensions (fixed X/Y axes)")
         if self.metrics is not None:
             for key in ("width_m", "length_m", "height_m", "rms_speed_m_s", "retained_fraction"):
@@ -228,6 +249,7 @@ class Example:
 
     @staticmethod
     def create_parser():
+        """Create the CLI parser for pour geometry, material, and timing."""
         parser = newton.examples.create_parser()
         parser.set_defaults(num_frames=720)
         parser.add_argument("--gallons", type=float, default=5.0, help="Bulk sand volume [US gallons]")
