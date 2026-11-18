@@ -12,6 +12,7 @@ from .clamping import (
 )
 from .drives import (
     DriveBase,
+    DriveGearedMotor,
     DriveNeuralGRU,
     DriveNeuralLSTM,
     DriveNeuralMLP,
@@ -49,6 +50,7 @@ __all__ = [
     "ClampingPositionBased",
     "ComponentKind",
     "DriveBase",
+    "DriveGearedMotor",
     "DriveNeuralGRU",
     "DriveNeuralLSTM",
     "DriveNeuralMLP",

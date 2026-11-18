@@ -350,6 +350,59 @@ In the loop below the drive declares one array named ``extra_input``:
        solver.step(state_0, state_1, control, contacts, dt)
        state_0, state_1 = state_1, state_0
 
+Measured-current geared motor
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:class:`DriveGearedMotor` converts signed motor winding current to joint
+torque through an ideal gearbox:
+
+.. math::
+
+   \tau_\mathrm{joint} = G\,k_t\,I
+
+Here, ``k_t`` is the motor torque constant [N·m/A], and ``gear_ratio``
+is the positive motor-to-joint speed ratio :math:`G = \omega_m / \dot q`.
+Positive current produces positive joint torque. Supply motor winding
+current, rather than DC bus current, using the matching torque-constant
+convention for the motor.
+
+.. code-block:: python
+
+   from newton.actuators import DriveGearedMotor
+
+   builder.add_actuator(
+       DriveGearedMotor,
+       index=builder.joint_qd_start[joint],
+       pos_index=builder.joint_q_start[joint],
+       k_t=0.08,
+       gear_ratio=10.0,
+   )
+   model = builder.finalize()
+   control = model.control()
+
+   # One float32 value per model joint DOF; update before each evaluation.
+   # For a model containing one hinge, 5 A produces 4 N·m.
+   control.measured_current.fill_(5.0)
+   control.joint_f.zero_()
+   model.actuators[0].step(model.state(), control, dt=0.001)
+
+The drive declares ``custom_inputs = ("measured_current",)``. The builder
+allocates ``control.measured_current``; :meth:`Actuator.step` passes that
+array to the drive in the ``custom_inputs`` dictionary. Current is indexed
+by joint velocity DOF, while ``k_t`` and ``gear_ratio`` are indexed by
+actuator channel. Updating current requires no drive reconstruction.
+
+This drive estimates torque from measurements; it ignores position/velocity
+targets and feedforward. It supports explicit effort evaluation and effort
+clamping, with no persistent state. It models neither transmission losses
+nor electrical dynamics. Configure physical friction and armature separately
+on the joints. Unlike :class:`MotorDC`, which predicts current from voltage
+and speed, this drive consumes externally measured current.
+
+USD disposition: not applicable. This runtime-only measurement adapter is
+configured through Python and consumes caller-supplied live or recorded
+current arrays; it has no USD authoring/import schema.
+
 .. _neural-network-checkpoints:
 
 Neural-Network Checkpoints

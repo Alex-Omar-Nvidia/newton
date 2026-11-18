@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from .base import DriveBase
+from .drive_geared_motor import DriveGearedMotor
 from .drive_neural_gru import DriveNeuralGRU
 from .drive_neural_lstm import DriveNeuralLSTM
 from .drive_neural_mlp import DriveNeuralMLP
@@ -10,6 +11,7 @@ from .drive_pid import DrivePID
 
 __all__ = [
     "DriveBase",
+    "DriveGearedMotor",
     "DriveNeuralGRU",
     "DriveNeuralLSTM",
     "DriveNeuralMLP",
