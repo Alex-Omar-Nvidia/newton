@@ -637,73 +637,6 @@ class TestDrivePD(unittest.TestCase):
             self.assertAlmostEqual(result[i], expected, places=4, msg=f"DOF {i}")
 
 
-class TestDriveGearedMotor(unittest.TestCase):
-    """Verify measured-current torque conversion and actuator integration."""
-
-    def test_builder_current_torque_and_clamping(self):
-        """Route changing DOF-indexed current through batched gains and effort clamps."""
-        builder = newton.ModelBuilder()
-        joints = [builder.add_joint_revolute(parent=-1, child=builder.add_link()) for _ in range(3)]
-        for joint in joints:
-            builder.add_articulation([joint])
-        for joint, k_t, gear_ratio in ((joints[2], 0.08, 10.0), (joints[0], 0.2, 3.0)):
-            builder.add_actuator(
-                newton.actuators.DriveGearedMotor,
-                index=builder.joint_qd_start[joint],
-                k_t=k_t,
-                gear_ratio=gear_ratio,
-                clamping=[(ClampingMaxEffort, {"max_effort": 6.0})],
-            )
-        model = builder.finalize()
-        self.assertEqual(len(model.actuators), 1)
-        actuator = model.actuators[0]
-        state, control = model.state(), model.control()
-        control.joint_target_q.fill_(100.0)
-        control.joint_act.fill_(100.0)
-
-        control.measured_current.assign(wp.array([-4.0, 99.0, 5.0], dtype=float, device=model.device))
-        control.joint_f.fill_(1.0)
-        actuator.step(state, control, dt=0.01)
-        np.testing.assert_allclose(control.joint_f.numpy(), [-1.4, 1.0, 5.0], atol=1e-6)
-
-        control.measured_current.assign(wp.array([0.0, 99.0, -10.0], dtype=float, device=model.device))
-        control.joint_f.zero_()
-        actuator.step(state, control, dt=0.01)
-        np.testing.assert_allclose(control.joint_f.numpy(), [0.0, 0.0, -6.0], atol=1e-6)
-
-    def test_invalid_parameters_and_current(self):
-        """Reject invalid scalar parameters, parameter arrays, and measured-current inputs."""
-        drive_class = newton.actuators.DriveGearedMotor
-        for name in ("k_t", "gear_ratio"):
-            for value in (0.0, -1.0, math.inf, math.nan):
-                with self.subTest(parameter=name, value=value), self.assertRaisesRegex(ValueError, name):
-                    drive_class.resolve_arguments({"k_t": 0.08, "gear_ratio": 10.0, name: value})
-            with self.subTest(missing=name), self.assertRaisesRegex(ValueError, name):
-                drive_class.resolve_arguments({key: 1.0 for key in ("k_t", "gear_ratio") if key != name})
-
-        k_t = wp.array([0.08], dtype=float)
-        with self.assertRaisesRegex(ValueError, "shape"):
-            drive_class(k_t=k_t, gear_ratio=wp.ones(2, dtype=float))
-        with self.assertRaisesRegex(ValueError, "float32"):
-            drive_class(k_t=wp.ones(1, dtype=wp.float64), gear_ratio=wp.ones(1, dtype=wp.float64))
-
-        actuator = Actuator(
-            indices=wp.array([0], dtype=wp.uint32),
-            drive=drive_class(k_t=k_t, gear_ratio=wp.array([10.0], dtype=float)),
-        )
-        sim_state = actuator.sim_state()
-        sim_state.joint_q = wp.zeros(1, dtype=float)
-        sim_state.joint_qd = wp.zeros(1, dtype=float)
-        control = actuator.sim_control()
-        control.joint_target_q = wp.zeros(1, dtype=float)
-        control.joint_target_qd = wp.zeros(1, dtype=float)
-        control.joint_f = wp.zeros(1, dtype=float)
-        for current in (None, [5.0], wp.zeros(2, dtype=float), wp.zeros(1, dtype=wp.float64), wp.zeros((1, 1))):
-            with self.subTest(current=current), self.assertRaisesRegex(ValueError, "measured_current"):
-                control.measured_current = current
-                actuator.step(sim_state, control, dt=0.01)
-
-
 class TestDrivePID(unittest.TestCase):
     """PID drive: f = const + act + kp*e + ki*integral + kd*de."""
 
@@ -979,7 +912,7 @@ class TestDriveNeuralGRU(unittest.TestCase):
         }
         # The caller-supplied column is keyed by whatever name the checkpoint chose.
         for name in metadata.get("custom_inputs", ()):
-            values[name] = case.bias_force[case.indices]
+            values[name] = getattr(case.control, name).numpy()[case.indices]
         raw = np.stack(tuple(values[key] for key in keys), axis=1)
         means = np.array([stats["mean"][key] for key in keys], dtype=np.float32)
         stds = np.array([stats["std"][key] for key in keys], dtype=np.float32)
@@ -1561,6 +1494,28 @@ class TestDriveNeuralGRU(unittest.TestCase):
 
         np.testing.assert_allclose(effort, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
 
+    def test_pd_torque_and_battery_current_inputs(self):
+        """Predict effort from independently changing PD commands and shared battery current."""
+        names = ("previous_pd_torque", "pd_torque", "battery_current")
+        metadata = self._metadata(names)
+        metadata["custom_inputs"] = list(reversed(names))
+        metadata["normalization"]["inputs"] = {
+            "mean": dict(zip(names, (1.0, -2.0, 3.0), strict=True)),
+            "std": dict(zip(names, (2.0, 4.0, 8.0), strict=True)),
+        }
+        case = self._make_case(self._save_gru("pd_current.onnx", metadata, input_size=3), 2)
+        self.assertEqual(case.actuator.drive.custom_inputs, names)
+        size = len(case.control.bias_force)
+        for index, name in enumerate(names):
+            setattr(case.control, name, wp.full(size, float(index + 1), device=self.device))
+        for name in names:
+            effort, _ = self._step(case)
+            np.testing.assert_allclose(effort, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
+            getattr(case.control, name).fill_(9.0)
+            changed, _ = self._step(case)
+            np.testing.assert_allclose(changed, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
+            self.assertFalse(np.allclose(effort, changed))
+
     def test_rejects_unknown_and_clashing_custom_inputs(self):
         """Reject a column that is neither built in nor declared, and a clashing declaration."""
         undeclared = self._metadata(("position", "mystery"))
@@ -1580,10 +1535,10 @@ class TestDriveNeuralGRU(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "may not reuse built-in feature names"):
             DriveNeuralGRU(path)
 
-        too_many = self._metadata(("position",))
-        too_many["custom_inputs"] = ["a", "b"]
-        path = self._save_gru("too_many.onnx", too_many, input_size=1)
-        with self.assertRaisesRegex(ValueError, "at most one custom input"):
+        too_many = self._metadata(("bias_force",))
+        too_many["custom_inputs"] = ["bias_force", "bias_force"]
+        path = self._save_gru("duplicate_custom.onnx", too_many, input_size=1)
+        with self.assertRaisesRegex(ValueError, "duplicates"):
             DriveNeuralGRU(path)
 
         for index, declared in enumerate(("bias_force", [1], [""], ["bias force"], ["class"])):

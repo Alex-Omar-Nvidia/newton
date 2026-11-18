@@ -38,7 +38,6 @@ construction.
    ClampingPositionBased
    ComponentKind
    DriveBase
-   DriveGearedMotor
    DriveNeuralGRU
    DriveNeuralLSTM
    DriveNeuralMLP

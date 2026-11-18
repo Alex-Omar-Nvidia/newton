@@ -41,7 +41,6 @@ def _compute_inputs_kernel(
     velocities: wp.array[float],
     target_pos: wp.array[float],
     target_vel: wp.array[float],
-    custom_input: wp.array[float],
     pos_indices: wp.array[wp.uint32],
     vel_indices: wp.array[wp.uint32],
     target_pos_indices: wp.array[wp.uint32],
@@ -68,9 +67,20 @@ def _compute_inputs_kernel(
         value = target_vel[target_vel_indices[i]]
     elif feature == _FEATURE_VELOCITY_ERROR:
         value = target_vel[target_vel_indices[i]] - velocity
-    elif feature == _FEATURE_CUSTOM_INPUT:
-        value = custom_input[vel_indices[i]]
     output[i, column] = (value - means[column]) / stds[column]
+
+
+@wp.kernel
+def _write_custom_input_kernel(
+    values: wp.array[float],
+    vel_indices: wp.array[wp.uint32],
+    column: int,
+    mean: float,
+    std: float,
+    output: wp.array2d[float],
+):
+    i = wp.tid()
+    output[i, column] = (values[vel_indices[i]] - mean) / std
 
 
 @wp.kernel
@@ -156,8 +166,8 @@ def _parse_custom_input_names(metadata: dict[str, Any], model_path: str) -> tupl
             f"DriveNeuralGRU checkpoint '{model_path}' custom_inputs must be a list of valid, non-keyword "
             f"identifiers; got {names!r}"
         )
-    if len(names) > 1:
-        raise ValueError(f"DriveNeuralGRU checkpoint '{model_path}' supports at most one custom input; got {names!r}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"DriveNeuralGRU checkpoint '{model_path}' custom_inputs must not contain duplicates")
     clashing = sorted(set(names).intersection(_INPUT_FEATURE_CODES))
     if clashing:
         raise ValueError(
@@ -501,7 +511,7 @@ class DriveNeuralGRU(DriveBase):
           - Ordered list of the network's input feature names, one per input
             column. Non-empty and duplicate-free.
         * - ``custom_inputs``
-          - Optional list naming at most one column of ``input_columns`` that
+          - Optional list naming columns of ``input_columns`` that
             the application supplies. The name must be a valid identifier and
             must not be a built-in feature name.
         * - ``normalization``
@@ -512,7 +522,7 @@ class DriveNeuralGRU(DriveBase):
             timestep must match it.
 
     **Input features.** Each name in ``input_columns`` is one of the built-in
-    features below, or the column named in ``custom_inputs``. Any other name is
+    features below, or a column named in ``custom_inputs``. Any other name is
     rejected.
 
     The drive computes the built-in features from the State and Control arrays
@@ -525,7 +535,7 @@ class DriveNeuralGRU(DriveBase):
     * ``target_velocity``
     * ``velocity_error`` — ``target_velocity - velocity``
 
-    The application supplies the custom column. It is declared through
+    The application supplies the custom columns. They are declared through
     :attr:`DriveBase.custom_inputs` and read from ``sim_control``; see
     :ref:`custom-drive-inputs`.
 
@@ -783,9 +793,7 @@ class DriveNeuralGRU(DriveBase):
     ) -> None:
         """Evaluate one GRU sample and write physical effort."""
         self._next_hidden = None
-        custom_input = None
-        if self.custom_inputs:
-            name = self.custom_inputs[0]
+        for name in self.custom_inputs:
             custom_input = (custom_inputs or {}).get(name)
             if custom_input is None:
                 raise RuntimeError(
@@ -828,7 +836,6 @@ class DriveNeuralGRU(DriveBase):
                 velocities,
                 target_pos,
                 target_vel,
-                custom_input,
                 pos_indices,
                 vel_indices,
                 target_pos_indices,
@@ -840,6 +847,22 @@ class DriveNeuralGRU(DriveBase):
             outputs=[self._net_input],
             device=runtime_device,
         )
+
+        for name in self.custom_inputs:
+            column = self._input_feature_keys.index(name)
+            wp.launch(
+                _write_custom_input_kernel,
+                dim=self._num_actuators,
+                inputs=[
+                    custom_inputs[name],
+                    vel_indices,
+                    column,
+                    self._input_means[column],
+                    self._input_stds[column],
+                ],
+                outputs=[self._net_input],
+                device=runtime_device,
+            )
 
         net_output = self._net_input
         next_hidden = []
