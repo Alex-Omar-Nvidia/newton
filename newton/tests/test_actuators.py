@@ -912,7 +912,7 @@ class TestDriveNeuralGRU(unittest.TestCase):
         }
         # The caller-supplied column is keyed by whatever name the checkpoint chose.
         for name in metadata.get("custom_inputs", ()):
-            values[name] = case.bias_force[case.indices]
+            values[name] = getattr(case.control, name).numpy()[case.indices]
         raw = np.stack(tuple(values[key] for key in keys), axis=1)
         means = np.array([stats["mean"][key] for key in keys], dtype=np.float32)
         stds = np.array([stats["std"][key] for key in keys], dtype=np.float32)
@@ -1494,6 +1494,28 @@ class TestDriveNeuralGRU(unittest.TestCase):
 
         np.testing.assert_allclose(effort, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
 
+    def test_pd_torque_and_battery_current_inputs(self):
+        """Predict effort from independently changing PD commands and shared battery current."""
+        names = ("previous_pd_torque", "pd_torque", "battery_current")
+        metadata = self._metadata(names)
+        metadata["custom_inputs"] = list(reversed(names))
+        metadata["normalization"]["inputs"] = {
+            "mean": dict(zip(names, (1.0, -2.0, 3.0), strict=True)),
+            "std": dict(zip(names, (2.0, 4.0, 8.0), strict=True)),
+        }
+        case = self._make_case(self._save_gru("pd_current.onnx", metadata, input_size=3), 2)
+        self.assertEqual(case.actuator.drive.custom_inputs, names)
+        size = len(case.control.bias_force)
+        for index, name in enumerate(names):
+            setattr(case.control, name, wp.full(size, float(index + 1), device=self.device))
+        for name in names:
+            effort, _ = self._step(case)
+            np.testing.assert_allclose(effort, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
+            getattr(case.control, name).fill_(9.0)
+            changed, _ = self._step(case)
+            np.testing.assert_allclose(changed, self._expected(metadata, case)[0], rtol=1e-5, atol=1e-6)
+            self.assertFalse(np.allclose(effort, changed))
+
     def test_rejects_unknown_and_clashing_custom_inputs(self):
         """Reject a column that is neither built in nor declared, and a clashing declaration."""
         undeclared = self._metadata(("position", "mystery"))
@@ -1513,10 +1535,10 @@ class TestDriveNeuralGRU(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "may not reuse built-in feature names"):
             DriveNeuralGRU(path)
 
-        too_many = self._metadata(("position",))
-        too_many["custom_inputs"] = ["a", "b"]
-        path = self._save_gru("too_many.onnx", too_many, input_size=1)
-        with self.assertRaisesRegex(ValueError, "at most one custom input"):
+        too_many = self._metadata(("bias_force",))
+        too_many["custom_inputs"] = ["bias_force", "bias_force"]
+        path = self._save_gru("duplicate_custom.onnx", too_many, input_size=1)
+        with self.assertRaisesRegex(ValueError, "duplicates"):
             DriveNeuralGRU(path)
 
         for index, declared in enumerate(("bias_force", [1], [""], ["bias force"], ["class"])):

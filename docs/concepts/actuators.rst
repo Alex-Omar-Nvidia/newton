@@ -350,6 +350,71 @@ In the loop below the drive declares one array named ``extra_input``:
        solver.step(state_0, state_1, control, contacts, dt)
        state_0, state_1 = state_1, state_0
 
+Predicting delivered torque from PD commands and current
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use :class:`DriveNeuralGRU` with a trained ONNX checkpoint to predict delivered
+joint torque from previous and new PD effort requests and measured supply
+current. This is an inference interface; Newton does not supply trained weights
+or assume a current-to-torque conversion for a shared battery measurement.
+
+For example, a checkpoint can declare the following metadata, together with
+its normalization statistics and training timestep ``sample_dt_s``::
+
+    "input_columns": ["previous_pd_torque", "pd_torque", "battery_current"],
+    "custom_inputs": ["previous_pd_torque", "pd_torque", "battery_current"]
+
+.. code-block:: python
+
+   from newton.actuators import ClampingMaxEffort, DriveNeuralGRU
+
+   builder.add_actuator(
+       DriveNeuralGRU,
+       index=builder.joint_qd_start[joint],
+       pos_index=builder.joint_q_start[joint],
+       model_path="trained_joint.onnx",
+       clamping=[(ClampingMaxEffort, {"max_effort": joint_effort_limit})],
+   )
+   model = builder.finalize()
+   control = model.control()
+
+   # Update before each inference; commands are joint torques in N·m.
+   control.previous_pd_torque.assign(previous_pd_torques)
+   control.pd_torque.assign(new_pd_torques)
+   # A single-world robot shares one measured battery current in amperes.
+   control.battery_current.fill_(battery_current_amps)
+
+The caller computes the new request using PD, for example
+``kp * (target_q - q) + kd * (target_qd - qd)``, and retains the previous
+request between control intervals. These arrays use velocity-DOF indexing;
+the builder allocates them from the checkpoint's custom-input declarations.
+Reset command history at episode boundaries, alongside the actuator's recurrent
+state. For replicated worlds, populate each world's DOFs with that world's
+current instead of broadcasting across the entire batch.
+
+Supply the current sample available before applying the new command. Train the
+scalar output in joint torque units against delivered torque averaged over the
+following control interval. A label derived from motor current estimates
+motor-derived torque, not independently measured gearbox output torque. The
+runtime timestep must match ``sample_dt_s``. Standalone simulation needs a
+caller-provided current signal or a separate supply model; this drive does not
+predict battery current.
+
+Battery current provides shared load context, not individual motor winding
+current. A roughly constant auxiliary load may be absorbed during training,
+but validate that assumption on the intended robot. Battery current alone does
+not determine available power or its distribution among joints. Additional
+checkpoint-selected inputs can include bus voltage, local motor current,
+temperature, or a supplied power budget. Built-in ``velocity`` is also available.
+Use consistent units and normalization in training and inference, and verify
+telemetry timing and sign conventions before collecting training data.
+
+Retain explicit per-joint effort limits after inference. Predicted torque does
+not enforce a shared electrical power budget or thermal protection. Those need
+separate supply allocation and thermal constraints. This runtime inference
+workflow uses Python configuration and caller-supplied telemetry; it adds no
+USD-authorable motor model.
+
 .. _neural-network-checkpoints:
 
 Neural-Network Checkpoints
@@ -376,7 +441,7 @@ read these keys:
   input and output names ``input_name``, ``hidden_in_name``, ``cell_in_name``,
   ``output_name``, ``hidden_out_name``, and ``cell_out_name``.
 * :class:`DriveNeuralGRU`: ``input_columns``, ``normalization``, and
-  ``sample_dt_s``, plus an optional ``custom_inputs`` that marks one column of
+  ``sample_dt_s``, plus an optional ``custom_inputs`` that marks columns of
   ``input_columns`` as an array the application supplies each step.
 
 Export the network with dynamic batch axes: axis 0 of the MLP input, and

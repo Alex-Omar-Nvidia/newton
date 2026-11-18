@@ -1,0 +1,1 @@
+Allow `newton.actuators.DriveNeuralGRU` checkpoints to consume multiple custom inputs, including previous and new PD torque requests and shared battery current for learned delivered-torque prediction.
